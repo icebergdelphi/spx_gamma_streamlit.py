@@ -27,8 +27,10 @@ def calcGammaEx(S, K, vol, T, r, q, optType, OI):
 def isThirdFriday(d):
     return d.weekday() == 4 and 15 <= d.day <= 21
 
+dividend_yield = st.number_input("Tasa de dividendos (% anual)", min_value=0.0, max_value=20.0, value=1.5, step=0.1)
+
 # Función para calcular el precio estimado de ES o NQ
-def calculate_future_price(index_price, r=0.04, d=0.015, index="SPX"):
+def calculate_future_price(index_price, r=0.04, dividend_yield, index="SPX"):
     current_date = datetime.now()
     # Asumimos que el próximo vencimiento es el tercer viernes de junio 2025 (20/06/2025)
     next_expiry = datetime(2025, 6, 20, 16, 0)  # Cierre del mercado
@@ -79,7 +81,7 @@ else:
 # Procesar datos si existen
 if data_json:
     spotPrice = data_json["data"]["close"]
-    futurePrice = calculate_future_price(spotPrice, r=risk_free_rate/100, d=0.015, index=selection.split('=>')[0] if '=>' in selection else selection)
+    futurePrice = calculate_future_price(spotPrice, r=risk_free_rate/100, dividend_yield, index=selection.split('=>')[0] if '=>' in selection else selection)
     options_data = data_json["data"]["options"]
 
     # Determinar qué precio usar para los cálculos (spotPrice para SPX/NDX, futurePrice para SPX=>ES/NDX=>NQ)
