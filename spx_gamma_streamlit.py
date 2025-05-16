@@ -9,11 +9,6 @@ from datetime import datetime, timedelta, date
 
 pd.options.display.float_format = '{:,.4f}'.format
 
-st.set_page_config( 
-   page_icon="🧊",
-   layout="wide", 
-)
-
 # Black-Scholes European-Options Gamma
 def calcGammaEx(S, K, vol, T, r, q, optType, OI):
     if T == 0 or vol == 0:
@@ -29,6 +24,16 @@ def calcGammaEx(S, K, vol, T, r, q, optType, OI):
 
 def isThirdFriday(d):
     return d.weekday() == 4 and 15 <= d.day <= 21
+
+# Función para calcular el precio estimado del ES o NQ
+def calculate_futures_price(index_price, r, d, is_ndx=False):
+    current_date = datetime.now()
+    # Asumimos que el próximo vencimiento es el tercer viernes de junio 2025 (20/06/2025)
+    next_expiry = datetime(2025, 6, 20, 16, 0)  # Cierre del mercado
+    T = (next_expiry - current_date).total_seconds() / (365.25 * 24 * 60 * 60)
+    dividend_yield = 0.015 if not is_ndx else 0.01  # 1.5% para SPX, 1% para NDX
+    futures_price = index_price * np.exp((r - dividend_yield) * T)
+    return futures_price
 
 # Inicialización en el estado de la sesión
 if 'last_request_time' not in st.session_state:
@@ -51,8 +56,8 @@ def fetch_data(index):
 current_time = datetime.now()
 if (current_time - st.session_state['last_request_time']).total_seconds() > 300 or st.session_state['data'] is None:
     st.session_state['last_request_time'] = current_time
-    index = st.selectbox("Seleccione el índice:", ["SPX", "NDX"], key="index")
-    data_json = fetch_data(index)
+    index = st.selectbox("Seleccione el índice:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="index")
+    data_json = fetch_data(index.split("=>")[0] if "=>" in index else index)
     if data_json:
         st.session_state['data'] = data_json
 else:
@@ -60,9 +65,13 @@ else:
     index = st.session_state.get('index', 'SPX')  # Usar el último índice seleccionado si existe
     data_json = st.session_state['data']
 
+# Campo editable para la tasa de interés libre de riesgo
+r_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=10.0, value=4.0, step=0.1) / 100
+
 # Procesar datos si existen
 if data_json:
     spotPrice = data_json["data"]["close"]
+    futuresPrice = calculate_futures_price(spotPrice, r_rate, 0.015, is_ndx="NDX" in index or "NQ" in index)
     options_data = data_json["data"]["options"]
 
     # Convertir datos JSON a DataFrame
@@ -130,6 +139,20 @@ if data_json:
     fromStrike = 0.8 * spotPrice
     toStrike = 1.2 * spotPrice
 
+    # Determinar qué gráficos mostrar según la selección
+    if "=>" in index:
+        base_index = index.split("=>")[0]
+        futures_name = index.split("=>")[1]
+        title_prefix = f"Total {futures_name} Gamma: "
+        spot_label = f"{base_index} Spot"
+        futures_label = f"{futures_name} Est."
+        futures_color = 'blue' if futures_name == 'ES' else 'green'
+    else:
+        title_prefix = f"Total {index} Gamma: "
+        spot_label = f"{index} Spot"
+        futures_label = None
+        futures_color = None
+
     # Chart 1: Absolute Gamma Exposure
     fig1 = go.Figure()
     fig1.add_trace(go.Bar(
@@ -140,9 +163,11 @@ if data_json:
         opacity=0.7,
         name='Gamma Exposure'
     ))
-    fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{index} Spot: {spotPrice:,.0f}", annotation_position="top right")
+    fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{spot_label}: {spotPrice:,.0f}", annotation_position="top right")
+    if futures_label:
+        fig1.add_vline(x=futuresPrice, line=dict(color=futures_color, width=2, dash='dash'), annotation_text=f"{futures_label}: {futuresPrice:,.2f}", annotation_position="top left")
     fig1.update_layout(
-        title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {index} Move",
+        title=f"{title_prefix}${{df['TotalGamma'].sum():,.2f}} Bn per 1% {index} Move" + (f" ({spot_label}={spotPrice:,.0f}, {futures_label}={futuresPrice:,.2f})" if futures_label else ""),
         xaxis_title="Strike",
         yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
         xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
@@ -174,19 +199,8 @@ if data_json:
         opacity=0.7,
         name='Put OI'
     ))
-    fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{index} Spot: {spotPrice:,.0f}", annotation_position="top right")
+    fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{spot_label}: {spotPrice:,.0f}", annotation_position="top right")
+    if futures_label:
+        fig2.add_vline(x=futuresPrice, line=dict(color=futures_color, width=2, dash='dash'), annotation_text=f"{futures_label}: {futuresPrice:,.2f}", annotation_position="top left")
     fig2.update_layout(
-        title=f"Total Open Interest for {index}",
-        xaxis_title="Strike",
-        yaxis_title="Open Interest (number of contracts)",
-        xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
-        yaxis=dict(tickformat=".2f", automargin=True),
-        showlegend=True,
-        template="plotly_dark",
-        font=dict(size=14),
-        margin=dict(l=20, r=20, t=50, b=50),
-        width=1200,
-        height=500,
-        barmode='overlay'
-    )
-    st.plotly_chart(fig2, use_container_width=True)
+        title=f"Total
