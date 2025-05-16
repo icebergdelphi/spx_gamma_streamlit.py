@@ -12,7 +12,6 @@ pd.options.display.float_format = '{:,.4f}'.format
 
 # Selección del índice por parte del usuario
 index = st.selectbox("Seleccione el índice:", ["SPX", "NDX"])
-
 # Obtener datos de CBOE
 try:
     response = requests.get(url=f"https://cdn.cboe.com/api/global/delayed_quotes/options/_" + index + ".json")
