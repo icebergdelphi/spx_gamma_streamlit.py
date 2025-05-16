@@ -2,5 +2,6 @@ streamlit
 pandas
 numpy
 scipy
-matplotlib
+matplotlib  
 requests
+plotly
