@@ -57,7 +57,7 @@ def fetch_data(index):
 
 # Selección del índice o conversión y tasa de interés
 selection = st.selectbox("Seleccione el índice o conversión:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="selection")
-risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=4.0, step=0.1, key="risk_free_rate")
+risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=5.0, step=0.1, key="risk_free_rate")
 
 # Verificar si la selección cambió
 if st.session_state['current_selection'] != selection:
