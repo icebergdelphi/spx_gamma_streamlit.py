@@ -3,12 +3,12 @@ import pandas as pd
 import numpy as np
 import scipy
 from scipy.stats import norm
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+import plotly.graph_objects as go
 import requests
 from datetime import datetime
 
 pd.options.display.float_format = '{:,.4f}'.format
+
 
 # Obtener datos de CBOE
 try:
@@ -44,25 +44,42 @@ dfPlot = dfAgg[(dfAgg['strike'] >= fromStrike) & (dfAgg['strike'] <= toStrike)]
 threshold = dfPlot['TotalGamma'].abs().max() * 0.01
 dfPlot = dfPlot[dfPlot['TotalGamma'].abs() > threshold]
 
-# Chart 1: Absolute Gamma Exposure
-plt.figure(figsize=(12, 7))
-plt.grid(True, linestyle='--', alpha=0.7)
-width = 6
-plt.bar(dfPlot['strike'].values, dfPlot['TotalGamma'].to_numpy(), width=width, linewidth=0.1, edgecolor='k', label="Exposición a Gamma")
-plt.xlim([fromStrike, toStrike])
-chartTitle = "Gamma Total: $" + str("{:.2f}".format(df['TotalGamma'].sum())) + " MM por 1% Movimiento del SPX"
-plt.title(chartTitle, fontweight="bold", fontsize=20)
-plt.xlabel('Strike', fontweight="bold", fontsize=14)
-plt.ylabel('Exposición a Gamma Spot ($ miles de millones/1% movimiento)', fontweight="bold", fontsize=14)
-plt.axvline(x=spotPrice, color='r', lw=2, label="SPX Spot: " + str("{:,.0f}".format(spotPrice)))
-plt.gca().xaxis.set_major_formatter(mticker.StrMethodFormatter('{x:,.0f}'))
-plt.gca().yaxis.set_major_formatter(mticker.StrMethodFormatter('{x:.2f}'))
-plt.legend(fontsize=12)
-st.pyplot(plt)
+# Chart 1: Absolute Gamma Exposure con Plotly
+fig1 = go.Figure()
 
-# Chart 2: Absolute Gamma Exposure by Calls and Puts
-plt.figure(figsize=(12, 7))
-plt.grid(True, linestyle='--', alpha=0.7)
+# Añadir barras para la exposición total a Gamma
+fig1.add_trace(go.Histogram(
+    x=dfPlot['strike'],
+    y=dfPlot['TotalGamma'],
+    histfunc='sum',
+    name='Exposición a Gamma',
+    marker_color='gray',
+    opacity=0.7,
+    xbins=dict(start=fromStrike, end=toStrike, size=6)  # Tamaño de las barras similar al original
+))
+
+# Añadir línea vertical para el SPX Spot
+fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"SPX Spot: {spotPrice:,.0f}", annotation_position="top right")
+
+# Configurar el diseño del gráfico
+fig1.update_layout(
+    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del SPX",
+    xaxis_title="Strike",
+    yaxis_title="Exposición a Gamma Spot ($ miles de millones/1% movimiento)",
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=","),
+    yaxis=dict(tickformat=".2f"),
+    showlegend=True,
+    template="plotly_dark",  # Tema oscuro para un aspecto más moderno
+    font=dict(size=14),
+    margin=dict(l=50, r=50, t=50, b=50)
+)
+
+# Mostrar el gráfico en Streamlit
+st.plotly_chart(fig1, use_container_width=True)
+
+# Chart 2: Absolute Gamma Exposure by Calls and Puts con Plotly
+fig2 = go.Figure()
+
 # Filtrar por Calls y Puts
 df_calls = df[df['optType'] == 'call'].groupby('strike').agg({'GEX': 'sum'}).reset_index()
 df_puts = df[df['optType'] == 'put'].groupby('strike').agg({'GEX': 'sum'}).reset_index()
@@ -71,25 +88,67 @@ dfPlot_puts = df_puts[(df_puts['strike'] >= fromStrike) & (df_puts['strike'] <= 
 threshold = max(dfPlot_calls['GEX'].abs().max(), dfPlot_puts['GEX'].abs().max()) * 0.05
 dfPlot_calls = dfPlot_calls[dfPlot_calls['GEX'].abs() > threshold]
 dfPlot_puts = dfPlot_puts[dfPlot_puts['GEX'].abs() > threshold]
-width = 1
-offset = 0.2
-plt.bar(dfPlot_calls['strike'].values - offset, dfPlot_calls['GEX'].to_numpy() / 10**9, width=width, linewidth=0.1, edgecolor='k', color='green', alpha=0.7, label="Gamma de Calls")
-plt.bar(dfPlot_puts['strike'].values + offset, dfPlot_puts['GEX'].to_numpy() / 10**9, width=width, linewidth=0.1, edgecolor='k', color='red', alpha=0.7, label="Gamma de Puts")
-plt.xlim([fromStrike, toStrike])
-chartTitle = "Gamma Total: $" + str("{:.2f}".format(df['TotalGamma'].sum())) + " MM por 1% Movimiento del SPX"
-plt.title(chartTitle, fontweight="bold", fontsize=20)
-plt.xlabel('Strike', fontweight="bold", fontsize=14)
-plt.ylabel('Exposición a Gamma Spot ($ miles de millones/1% movimiento)', fontweight="bold", fontsize=14)
-plt.axvline(x=spotPrice, color='blue', lw=2, label="SPX Spot: " + str("{:,.0f}".format(spotPrice)))
-plt.gca().xaxis.set_major_formatter(mticker.StrMethodFormatter('{x:,.0f}'))
-plt.gca().yaxis.set_major_formatter(mticker.StrMethodFormatter('{x:.2f}'))
+
+# Añadir barras para Calls
+fig2.add_trace(go.Histogram(
+    x=dfPlot_calls['strike'],
+    y=dfPlot_calls['GEX'] / 10**9,
+    histfunc='sum',
+    name='Gamma de Calls',
+    marker_color='green',
+    opacity=0.7,
+    xbins=dict(start=fromStrike, end=toStrike, size=1)
+))
+
+# Añadir barras para Puts
+fig2.add_trace(go.Histogram(
+    x=dfPlot_puts['strike'],
+    y=dfPlot_puts['GEX'] / 10**9,
+    histfunc='sum',
+    name='Gamma de Puts',
+    marker_color='red',
+    opacity=0.7,
+    xbins=dict(start=fromStrike, end=toStrike, size=1)
+))
+
+# Añadir línea vertical para el SPX Spot
+fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"SPX Spot: {spotPrice:,.0f}", annotation_position="top right")
+
+# Añadir anotaciones para los strikes más significativos
 top_call_strikes = dfPlot_calls['GEX'].nlargest(3).index.tolist()
 top_put_strikes = dfPlot_puts['GEX'].nsmallest(3).index.tolist()
+
 for strike in top_call_strikes:
     gamma_value = dfPlot_calls.loc[strike, 'GEX'] / 10**9
-    plt.annotate(f"{strike:.0f}: {gamma_value:.2f}B", xy=(strike - offset, gamma_value), xytext=(0, 5), textcoords='offset points', ha='center', fontsize=9, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.7))
+    fig2.add_annotation(
+        x=strike, y=gamma_value,
+        text=f"{strike:.0f}: {gamma_value:.2f}B",
+        showarrow=True, arrowhead=1, ax=0, ay=-30,
+        bgcolor="white", bordercolor="green", opacity=0.7
+    )
+
 for strike in top_put_strikes:
     gamma_value = dfPlot_puts.loc[strike, 'GEX'] / 10**9
-    plt.annotate(f"{strike:.0f}: {gamma_value:.2f}B", xy=(strike + offset, gamma_value), xytext=(0, -15), textcoords='offset points', ha='center', fontsize=9, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.7))
-plt.legend(fontsize=12)
-st.pyplot(plt)
+    fig2.add_annotation(
+        x=strike, y=gamma_value,
+        text=f"{strike:.0f}: {gamma_value:.2f}B",
+        showarrow=True, arrowhead=1, ax=0, ay=30,
+        bgcolor="white", bordercolor="red", opacity=0.7
+    )
+
+# Configurar el diseño del gráfico
+fig2.update_layout(
+    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del SPX",
+    xaxis_title="Strike",
+    yaxis_title="Exposición a Gamma Spot ($ miles de millones/1% movimiento)",
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=","),
+    yaxis=dict(tickformat=".2f"),
+    showlegend=True,
+    template="plotly_dark",
+    font=dict(size=14),
+    margin=dict(l=50, r=50, t=50, b=50),
+    barmode='overlay'  # Superponer barras para mejor visualización
+)
+
+# Mostrar el gráfico en Streamlit
+st.plotly_chart(fig2, use_container_width=True)
