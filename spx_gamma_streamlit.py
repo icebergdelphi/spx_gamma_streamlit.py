@@ -7,11 +7,10 @@ import plotly.graph_objects as go
 import requests
 from datetime import datetime, timedelta, date
 
+st.set_page_config(page_icon="🧊", layout="wide")
+
 pd.options.display.float_format = '{:,.4f}'.format
-st.set_page_config( 
-   page_icon="🧊",
-   layout="wide", 
-)
+
 # Black-Scholes European-Options Gamma
 def calcGammaEx(S, K, vol, T, r, q, optType, OI):
     if T == 0 or vol == 0:
@@ -152,9 +151,8 @@ if data_json:
             name='Gamma Exposure'
         ))
         fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{selection} Spot: {spotPrice:,.0f}", annotation_position="top right")
-        fig1.add_vline(x=futurePrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"Future Est.: {futurePrice:,.2f}", annotation_position="top left")
         fig1.update_layout(
-            title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {selection} Move ({selection}={spotPrice:,.0f}, Future={futurePrice:,.2f})",
+            title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {selection} Move",
             xaxis_title="Strike",
             yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
             xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
@@ -187,9 +185,8 @@ if data_json:
             name='Put OI'
         ))
         fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{selection} Spot: {spotPrice:,.0f}", annotation_position="top right")
-        fig2.add_vline(x=futurePrice, line=dict(color='green', width=2, dash='dash'), annotation_text=f"Future Est.: {futurePrice:,.2f}", annotation_position="top left")
         fig2.update_layout(
-            title=f"Total Open Interest for {selection} ({selection}={spotPrice:,.0f}, Future={futurePrice:,.2f})",
+            title=f"Total Open Interest for {selection}",
             xaxis_title="Strike",
             yaxis_title="Open Interest (number of contracts)",
             xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
