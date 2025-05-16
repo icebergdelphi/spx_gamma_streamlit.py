@@ -6,24 +6,27 @@ from scipy.stats import norm
 import plotly.graph_objects as go
 import requests
 from datetime import datetime
+import sys
 
 pd.options.display.float_format = '{:,.4f}'.format
 
+# Selección del índice por parte del usuario
+index = st.selectbox("Seleccione el índice:", ["SPX", "NDX"])
 
 # Obtener datos de CBOE
 try:
-    response = requests.get(url="https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json")
+    response = requests.get(url=f"https://cdn.cboe.com/api/global/delayed_quotes/options/_" + index + ".json")
     response.raise_for_status()  # Verifica si la solicitud fue exitosa
     data_json = response.json()
     spotPrice = data_json["data"]["close"]
     options_data = data_json["data"]["options"]
 except Exception as e:
-    st.error(f"Error al obtener datos de CBOE: {e}")
+    st.error(f"Error al obtener datos de CBOE para {index}: {e}")
     st.stop()
 
 # Convertir datos JSON a DataFrame
 df = pd.DataFrame(options_data)
-df['strike'] = df['option'].str.extract(r'SPX\d{6}[CP](\d{6})').astype(float) / 10000  # Extraer strike del código de opción
+df['strike'] = df['option'].str.extract(r'SPX\d{6}[CP](\d{6})' if index == "SPX" else r'NDX\d{6}[CP](\d{6})').astype(float) / 10000  # Extraer strike según el índice
 df['optType'] = df['option'].str[-7].replace({'C': 'call', 'P': 'put'})
 df['open_interest'] = df['open_interest'].astype(float)
 df['gamma'] = df['gamma'].astype(float)
@@ -59,19 +62,21 @@ fig1.add_trace(go.Histogram(
 ))
 
 # Añadir línea vertical para el SPX Spot
-fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"SPX Spot: {spotPrice:,.0f}", annotation_position="top right")
+fig1.add_vline(x=spotPrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{index} Spot: {spotPrice:,.0f}", annotation_position="top right")
 
 # Configurar el diseño del gráfico
 fig1.update_layout(
-    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del SPX",
+    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del {index}",
     xaxis_title="Strike",
     yaxis_title="Exposición a Gamma Spot ($ miles de millones/1% movimiento)",
-    xaxis=dict(range=[fromStrike, toStrike], tickformat=","),
-    yaxis=dict(tickformat=".2f"),
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+    yaxis=dict(tickformat=".2f", automargin=True),
     showlegend=True,
-    template="plotly_dark",  # Tema oscuro para un aspecto más moderno
+    template="plotly_dark",
     font=dict(size=14),
-    margin=dict(l=50, r=50, t=50, b=50)
+    margin=dict(l=20, r=20, t=50, b=50),  # Márgenes reducidos para más ancho
+    width=1200,  # Aumentar el ancho del gráfico
+    height=500  # Mantener altura razonable
 )
 
 # Mostrar el gráfico en Streamlit
@@ -112,7 +117,7 @@ fig2.add_trace(go.Histogram(
 ))
 
 # Añadir línea vertical para el SPX Spot
-fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"SPX Spot: {spotPrice:,.0f}", annotation_position="top right")
+fig2.add_vline(x=spotPrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{index} Spot: {spotPrice:,.0f}", annotation_position="top right")
 
 # Añadir anotaciones para los strikes más significativos
 top_call_strikes = dfPlot_calls['GEX'].nlargest(3).index.tolist()
@@ -138,16 +143,17 @@ for strike in top_put_strikes:
 
 # Configurar el diseño del gráfico
 fig2.update_layout(
-    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del SPX",
+    title=f"Gamma Total: ${df['TotalGamma'].sum():,.2f} MM por 1% Movimiento del {index}",
     xaxis_title="Strike",
     yaxis_title="Exposición a Gamma Spot ($ miles de millones/1% movimiento)",
-    xaxis=dict(range=[fromStrike, toStrike], tickformat=","),
-    yaxis=dict(tickformat=".2f"),
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+    yaxis=dict(tickformat=".2f", automargin=True),
     showlegend=True,
     template="plotly_dark",
     font=dict(size=14),
-    margin=dict(l=50, r=50, t=50, b=50),
-    barmode='overlay'  # Superponer barras para mejor visualización
+    margin=dict(l=20, r=20, t=50, b=50),  # Márgenes reducidos para más ancho
+    width=1200,  # Aumentar el ancho del gráfico
+    height=500  # Mantener altura razonable
 )
 
 # Mostrar el gráfico en Streamlit
