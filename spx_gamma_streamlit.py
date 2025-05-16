@@ -7,14 +7,12 @@ import plotly.graph_objects as go
 import requests
 from datetime import datetime, timedelta, date
 
+pd.options.display.float_format = '{:,.4f}'.format
 
 st.set_page_config( 
    page_icon="🧊",
    layout="wide", 
 )
-
-pd.options.display.float_format = '{:,.4f}'.format
-
 
 # Black-Scholes European-Options Gamma
 def calcGammaEx(S, K, vol, T, r, q, optType, OI):
