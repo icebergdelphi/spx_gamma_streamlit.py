@@ -10,9 +10,6 @@ from datetime import datetime
 
 pd.options.display.float_format = '{:,.4f}'.format
 
-# Título de la aplicación
-st.title("SPX Gamma Exposure Dashboard")
-
 # Obtener datos de CBOE
 try:
     response = requests.get(url="https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json")
