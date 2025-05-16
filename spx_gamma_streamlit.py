@@ -5,14 +5,14 @@ import scipy
 from scipy.stats import norm
 import plotly.graph_objects as go
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 
 pd.options.display.float_format = '{:,.4f}'.format
 
 # Black-Scholes European-Options Gamma
 def calcGammaEx(S, K, vol, T, r, q, optType, OI):
-    if T == 0 or vol == 0:
+    if T <= 0 or vol == 0:
         return 0
     dp = (np.log(S/K) + (r - q + 0.5*vol**2)*T) / (vol*np.sqrt(T))
     dm = dp - vol*np.sqrt(T)
@@ -44,10 +44,27 @@ df['optType'] = df['option'].str[-7].replace({'C': 'call', 'P': 'put'})
 df['open_interest'] = df['open_interest'].astype(float)
 df['iv'] = df['iv'].astype(float)  # Implied Volatility from JSON
 
-# Calcular tiempo hasta la expiración (T) usando last_trade_time y la fecha actual (16/05/2025)
-current_date = datetime(2025, 5, 16)
+# Asumir una volatilidad implícita fija si iv es 0
+df['iv'] = df['iv'].replace(0.0, 0.2)  # Asumir 20% si iv es 0
+
+# Calcular tiempo hasta la expiración (T) usando la fecha de expiración y la fecha actual
+current_date = datetime(2025, 5, 16, 5, 16)  # Fecha actual: 16/05/2025 05:16 AM EST
 df['expiration'] = pd.to_datetime(df['option'].str.extract(r'SPX\d{2}(\d{2}\d{2}\d{2})' if index == "SPX" else r'NDX\d{2}(\d{2}\d{2}\d{2})')[0], format='%y%m%d')
-df['T'] = (df['expiration'] - current_date).dt.days / 365.0  # T en años
+
+# Ajustar la fecha de expiración al cierre del mercado (16:00)
+df['expiration'] = df['expiration'].apply(lambda x: x.replace(hour=16, minute=0))
+
+# Calcular T en años con precisión horaria
+df['T'] = (df['expiration'] - current_date).dt.total_seconds() / (365.25 * 24 * 60 * 60)  # T en años
+df['T'] = df['T'].clip(lower=1e-5)  # Evitar T <= 0, usar un valor pequeño
+
+# Filtrar opciones con interés abierto positivo (opcional, para evitar ruido)
+df = df[df['open_interest'] > 0]
+
+# Si no hay opciones con interés abierto, mostrar mensaje y detener
+if df.empty:
+    st.warning(f"No hay opciones con interés abierto para {index} en los datos proporcionados.")
+    st.stop()
 
 # Parámetros para calcGammaEx
 r = 0.05  # Tasa libre de riesgo (5% asumido)
@@ -58,7 +75,7 @@ df['gamma_calc'] = df.apply(lambda row: calcGammaEx(
     S=spotPrice,
     K=row['strike'],
     vol=row['iv'],
-    T=row['T'] if row['T'] > 0 else 0.0001,  # Evitar T=0
+    T=row['T'],
     r=r,
     q=q,
     optType=row['optType'],
@@ -90,8 +107,8 @@ toStrike = 1.2 * spotPrice
 
 # Filtrar datos para los gráficos
 dfPlot = dfAgg[(dfAgg['strike'] >= fromStrike) & (dfAgg['strike'] <= toStrike)]
-threshold = dfPlot['TotalGamma'].abs().max() * 0.01
-dfPlot = dfPlot[dfPlot['TotalGamma'].abs() > threshold]
+threshold = dfPlot['TotalGamma'].abs().max() * 0.01 if not dfPlot['TotalGamma'].empty else 0
+dfPlot = dfPlot[dfPlot['TotalGamma'].abs() > threshold] if not dfPlot.empty else dfPlot
 
 # Chart 1: Absolute Gamma Exposure con Plotly
 fig1 = go.Figure()
