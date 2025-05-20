@@ -153,31 +153,46 @@ if data_json:
     fromStrike = 0.8 * basePrice
     toStrike = 1.2 * basePrice
 
-    # Chart 1: Absolute Gamma Exposure
-    fig1 = go.Figure()
-    fig1.add_trace(go.Bar(
-        x=dfAgg.index,
-        y=dfAgg['TotalGamma'],
-        width=6,
-        marker_color='gray',
-        opacity=0.7,
-        name='Gamma Exposure'
-    ))
-    fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
-    fig1.update_layout(
-        title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {display_label} Move",
-        xaxis_title="Strike",
-        yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
-        xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
-        yaxis=dict(tickformat=".2f", automargin=True),
-        showlegend=True,
-        template="plotly_dark",
-        font=dict(size=14),
-        margin=dict(l=20, r=20, t=50, b=50),
-        width=1200,
-        height=500
-    )
-    st.plotly_chart(fig1, use_container_width=True)
+  # Chart 1: Absolute Gamma Exposure
+fig1 = go.Figure()
+
+# Positive Gamma Exposure (light blue)
+positive_gamma = dfAgg[dfAgg['TotalGamma'] >= 0]
+fig1.add_trace(go.Bar(
+    x=positive_gamma.index,
+    y=positive_gamma['TotalGamma'],
+    width=6,
+    marker_color='#66B3FF',  # Light blue
+    opacity=0.7,
+    name='Positive Gamma'
+))
+
+# Negative Gamma Exposure (orange)
+negative_gamma = dfAgg[dfAgg['TotalGamma'] < 0]
+fig1.add_trace(go.Bar(
+    x=negative_gamma.index,
+    y=negative_gamma['TotalGamma'],
+    width=6,
+    marker_color='#FF8C00',  # Orange
+    opacity=0.7,
+    name='Negative Gamma'
+))
+
+fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
+fig1.update_layout(
+    title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {display_label} Move",
+    xaxis_title="Strike",
+    yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+    yaxis=dict(tickformat=".2f", automargin=True),
+    showlegend=True,
+    template="plotly_dark",
+    font=dict(size=14),
+    margin=dict(l=20, r=20, t=50, b=50),
+    width=1200,
+    height=500
+)
+st.plotly_chart(fig1, use_container_width=True)
 
     # Chart 2: Open Interest by Calls and Puts
     fig2 = go.Figure()
