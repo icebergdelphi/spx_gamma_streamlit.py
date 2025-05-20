@@ -58,7 +58,6 @@ def fetch_data(index):
 selection = st.selectbox("Seleccione el índice o conversión:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="selection")
 risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=5.0, step=0.1, key="risk_free_rate")
 bar_width = st.slider("Bar Width for Charts", min_value=5, max_value=20, value=6, step=1)
-show_strike_annotations = st.checkbox("Show Important Strike Prices on Charts", value=False)
 
 # Toggle for auto-refresh
 auto_refresh = st.checkbox("Enable Auto-Refresh (every 5 minutes)", value=False)
@@ -160,6 +159,9 @@ if data_json:
     fromStrike = 0.8 * basePrice
     toStrike = 1.2 * basePrice
 
+    # Checkbox para el Gráfico 1
+    show_strike_annotations_chart1 = st.checkbox("Show Important Strike Prices on Gamma Chart", value=False)
+
     # Chart 1: Absolute Gamma Exposure
     fig1 = go.Figure()
     positive_gamma = dfAgg[dfAgg['TotalGamma'] >= 0]
@@ -183,7 +185,7 @@ if data_json:
     fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
     
     # Conditionally show annotations for Chart 1
-    if show_strike_annotations:
+    if show_strike_annotations_chart1:
         top_positive = positive_gamma.nlargest(5, 'TotalGamma')
         for strike in top_positive.index:
             fig1.add_annotation(
@@ -222,6 +224,9 @@ if data_json:
         height=500
     )
     st.plotly_chart(fig1, use_container_width=True)
+
+    # Checkbox para el Gráfico 2
+    show_strike_annotations_chart2 = st.checkbox("Show Important Strike Prices on Open Interest Chart", value=False)
 
     # Chart 2: Open Interest by Calls and Puts
     fig2 = go.Figure()
@@ -262,7 +267,8 @@ if data_json:
         showlegend=False
     ))
     
-    if show_strike_annotations:
+    # Conditionally show annotations for Chart 2
+    if show_strike_annotations_chart2:
         for strike in top_calls.index:
             fig2.add_annotation(
                 x=strike,
