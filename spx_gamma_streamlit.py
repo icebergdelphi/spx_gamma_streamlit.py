@@ -77,10 +77,16 @@ if (current_time - st.session_state['last_request_time']).total_seconds() > 300 
     if data_json:
         st.session_state['data'] = data_json
 else:
-    remaining_seconds = int(300 - (current_time - st.session_state['last_request_time']).total_seconds())
-    remaining_minutes = remaining_seconds // 60
-    remaining_seconds = remaining_seconds % 60
-    st.write(f"Next update in: {remaining_minutes:02d}:{remaining_seconds:02d}")
+    # Placeholder para el timer dinámico
+    timer_placeholder = st.empty()
+    # Simular actualización del timer durante 10 iteraciones (10 segundos)
+    for _ in range(10):
+        current_time = datetime.now()
+        remaining_seconds = int(300 - (current_time - st.session_state['last_request_time']).total_seconds())
+        remaining_minutes = remaining_seconds // 60
+        remaining_seconds = remaining_seconds % 60
+        timer_placeholder.write(f"Next update in: {remaining_minutes:02d}:{remaining_seconds:02d}")
+        time.sleep(1)  # Esperar 1 segundo antes de la próxima actualización
     data_json = st.session_state['data']
 
 # Auto-refresh logic
@@ -178,7 +184,6 @@ if data_json:
     
     # Conditionally show annotations for Chart 1
     if show_strike_annotations:
-        # Annotate top 5 positive gamma strikes
         top_positive = positive_gamma.nlargest(5, 'TotalGamma')
         for strike in top_positive.index:
             fig1.add_annotation(
@@ -191,7 +196,6 @@ if data_json:
                 font=dict(color="white")
             )
         
-        # Annotate top 5 negative gamma strikes
         top_negative = negative_gamma.nsmallest(5, 'TotalGamma')
         for strike in top_negative.index:
             fig1.add_annotation(
@@ -258,7 +262,6 @@ if data_json:
         showlegend=False
     ))
     
-    # Conditionally show annotations for Chart 2
     if show_strike_annotations:
         for strike in top_calls.index:
             fig2.add_annotation(
