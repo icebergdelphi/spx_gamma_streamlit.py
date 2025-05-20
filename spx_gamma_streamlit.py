@@ -306,3 +306,142 @@ if data_json:
         barmode='overlay'
     )
     st.plotly_chart(fig2, use_container_width=True)
+
+# Gráfico 3
+
+# Preparar datos para el top 5 de calls y puts
+# Ordenar por Open Interest para identificar los más importantes
+top_calls_df = dfAgg.nlargest(5, 'CallOpenInt').reset_index()
+top_puts_df = dfAgg.nlargest(5, 'PutOpenInt').reset_index()
+
+# Añadir más información a los top calls y puts
+# Para calls, recuperamos último precio de venta
+top_calls_df['LastSale'] = top_calls_df['StrikePrice'].apply(
+    lambda strike: df[df['StrikePrice'] == strike]['CallLastSale'].iloc[0] 
+    if not df[df['StrikePrice'] == strike].empty and len(df[df['StrikePrice'] == strike]['CallLastSale']) > 0 
+    else 0
+)
+
+# Para puts, recuperamos último precio de venta
+top_puts_df['LastSale'] = top_puts_df['StrikePrice'].apply(
+    lambda strike: df[df['StrikePrice'] == strike]['PutLastSale'].iloc[0] 
+    if not df[df['StrikePrice'] == strike].empty and len(df[df['StrikePrice'] == strike]['PutLastSale']) > 0 
+    else 0
+)
+
+# Crear un layout con dos columnas para mostrar los top 5 calls y puts
+st.subheader(f"Top 5 Strikes de Interés para {display_label}")
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### Top 5 Calls")
+    call_data = {
+        "Strike": top_calls_df['StrikePrice'].tolist(),
+        "Open Interest": top_calls_df['CallOpenInt'].tolist(),
+        "Last Sale": top_calls_df['LastSale'].tolist(),
+    }
+    call_table = pd.DataFrame(call_data)
+    # Formatear para mostrar números enteros para Strike y OI, y formato de precio para Last Sale
+    call_table['Strike'] = call_table['Strike'].apply(lambda x: f"{int(x):,}")
+    call_table['Open Interest'] = call_table['Open Interest'].apply(lambda x: f"{int(x):,}")
+    call_table['Last Sale'] = call_table['Last Sale'].apply(lambda x: f"${x:.2f}")
+    st.table(call_table)
+
+with col2:
+    st.markdown("### Top 5 Puts")
+    put_data = {
+        "Strike": top_puts_df['StrikePrice'].tolist(),
+        "Open Interest": top_puts_df['PutOpenInt'].tolist(),
+        "Last Sale": top_puts_df['LastSale'].tolist(),
+    }
+    put_table = pd.DataFrame(put_data)
+    # Formatear para mostrar números enteros para Strike y OI, y formato de precio para Last Sale
+    put_table['Strike'] = put_table['Strike'].apply(lambda x: f"{int(x):,}")
+    put_table['Open Interest'] = put_table['Open Interest'].apply(lambda x: f"{int(x):,}")
+    put_table['Last Sale'] = put_table['Last Sale'].apply(lambda x: f"${x:.2f}")
+    st.table(put_table)
+
+# También puedes crear un gráfico visual de estos datos
+show_strike_annotations_chart3 = st.checkbox("Show Top Strikes Visual Comparison", value=False)
+
+if show_strike_annotations_chart3:
+    # Crear un gráfico visual combinado
+    fig3 = go.Figure()
+    
+    # Usar un gráfico de barras horizontales para los calls
+    fig3.add_trace(go.Bar(
+        y=[f"Call {i+1}" for i in range(len(top_calls_df))],
+        x=top_calls_df['CallOpenInt'],
+        orientation='h',
+        name='Call OI',
+        marker_color='green',
+        text=[f"Strike: {int(x)}<br>Last Sale: ${y:.2f}" for x, y in zip(top_calls_df['StrikePrice'], top_calls_df['LastSale'])],
+        hoverinfo='text+x',
+        opacity=0.7
+    ))
+    
+    # Usar un gráfico de barras horizontales para los puts
+    fig3.add_trace(go.Bar(
+        y=[f"Put {i+1}" for i in range(len(top_puts_df))],
+        x=top_puts_df['PutOpenInt'],
+        orientation='h',
+        name='Put OI',
+        marker_color='red',
+        text=[f"Strike: {int(x)}<br>Last Sale: ${y:.2f}" for x, y in zip(top_puts_df['StrikePrice'], top_puts_df['LastSale'])],
+        hoverinfo='text+x',
+        opacity=0.7
+    ))
+    
+    fig3.update_layout(
+        title=f"Top 5 Strikes by Open Interest - {display_label}",
+        xaxis_title="Open Interest (number of contracts)",
+        yaxis=dict(automargin=True),
+        template="plotly_dark",
+        font=dict(size=14),
+        margin=dict(l=20, r=20, t=50, b=50),
+        width=1200,
+        height=500,
+        barmode='group'
+    )
+    
+    st.plotly_chart(fig3, use_container_width=True)
+
+# Opcional: También puedes añadir un gráfico circular para mostrar la distribución
+# del Open Interest entre los Top 5 calls y puts versus el resto
+
+show_distribution_chart = st.checkbox("Show OI Distribution", value=False)
+
+if show_distribution_chart:
+    # Calcular totales
+    total_call_oi = dfAgg['CallOpenInt'].sum()
+    total_put_oi = dfAgg['PutOpenInt'].sum()
+    
+    top5_call_oi = top_calls_df['CallOpenInt'].sum()
+    top5_put_oi = top_puts_df['PutOpenInt'].sum()
+    
+    other_call_oi = total_call_oi - top5_call_oi
+    other_put_oi = total_put_oi - top5_put_oi
+    
+    # Crear datos para el gráfico
+    labels = ['Top 5 Calls', 'Other Calls', 'Top 5 Puts', 'Other Puts']
+    values = [top5_call_oi, other_call_oi, top5_put_oi, other_put_oi]
+    colors = ['#00FF00', '#66B3FF', '#FF0000', '#FF8C00']
+    
+    fig4 = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=values,
+        hole=.4,
+        marker_colors=colors
+    )])
+    
+    fig4.update_layout(
+        title=f"Distribution of Open Interest - {display_label}",
+        template="plotly_dark",
+        font=dict(size=14),
+        margin=dict(l=20, r=20, t=50, b=50),
+        width=800,
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+    )
+    
+    st.plotly_chart(fig4, use_container_width=True)
