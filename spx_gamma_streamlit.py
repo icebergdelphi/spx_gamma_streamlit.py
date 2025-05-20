@@ -194,37 +194,87 @@ fig1.update_layout(
 )
 st.plotly_chart(fig1, use_container_width=True)
 
-    # Chart 2: Open Interest by Calls and Puts
-    fig2 = go.Figure()
-    fig2.add_trace(go.Bar(
-        x=dfAgg.index,
-        y=dfAgg['CallOpenInt'],
-        width=6,
-        marker_color='green',
-        opacity=0.7,
-        name='Call OI'
-    ))
-    fig2.add_trace(go.Bar(
-        x=dfAgg.index,
-        y=-1 * dfAgg['PutOpenInt'],
-        width=6,
-        marker_color='red',
-        opacity=0.7,
-        name='Put OI'
-    ))
-    fig2.add_vline(x=basePrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
-    fig2.update_layout(
-        title=f"Total Open Interest for {display_label}",
-        xaxis_title="Strike",
-        yaxis_title="Open Interest (number of contracts)",
-        xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
-        yaxis=dict(tickformat=".2f", automargin=True),
-        showlegend=True,
-        template="plotly_dark",
-        font=dict(size=14),
-        margin=dict(l=20, r=20, t=50, b=50),
-        width=1200,
-        height=500,
-        barmode='overlay'
+# Chart 2: Open Interest by Calls and Puts
+fig2 = go.Figure()
+
+# Base bars for all strikes
+fig2.add_trace(go.Bar(
+    x=dfAgg.index,
+    y=dfAgg['CallOpenInt'],
+    width=6,
+    marker_color='green',
+    opacity=0.5,  # Lower opacity for non-key strikes
+    name='Call OI'
+))
+fig2.add_trace(go.Bar(
+    x=dfAgg.index,
+    y=-1 * dfAgg['PutOpenInt'],
+    width=6,
+    marker_color='red',
+    opacity=0.5,  # Lower opacity for non-key strikes
+    name='Put OI'
+))
+
+# Highlight top 5 strikes for Calls
+top_calls = dfAgg.nlargest(5, 'CallOpenInt')
+fig2.add_trace(go.Bar(
+    x=top_calls.index,
+    y=top_calls['CallOpenInt'],
+    width=6,
+    marker_color='#00FF00',  # Brighter green for key strikes
+    opacity=1.0,
+    name='Top Call OI',
+    showlegend=False
+))
+
+# Highlight top 5 strikes for Puts
+top_puts = dfAgg.nlargest(5, 'PutOpenInt')
+fig2.add_trace(go.Bar(
+    x=top_puts.index,
+    y=-1 * top_puts['PutOpenInt'],
+    width=6,
+    marker_color='#FF0000',  # Brighter red for key strikes
+    opacity=1.0,
+    name='Top Put OI',
+    showlegend=False
+))
+
+# Add annotations for top strikes
+for strike, oi in top_calls['CallOpenInt'].items():
+    fig2.add_annotation(
+        x=strike,
+        y=oi,
+        text=f"{int(oi)}",
+        showarrow=True,
+        arrowhead=1,
+        yshift=10,
+        font=dict(color="white")
     )
-    st.plotly_chart(fig2, use_container_width=True)
+
+for strike, oi in top_puts['PutOpenInt'].items():
+    fig2.add_annotation(
+        x=strike,
+        y=-1 * oi,
+        text=f"{int(oi)}",
+        showarrow=True,
+        arrowhead=1,
+        yshift=-10,
+        font=dict(color="white")
+    )
+
+fig2.add_vline(x=basePrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
+fig2.update_layout(
+    title=f"Total Open Interest for {display_label}",
+    xaxis_title="Strike",
+    yaxis_title="Open Interest (number of contracts)",
+    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+    yaxis=dict(tickformat=".0f", automargin=True),
+    showlegend=True,
+    template="plotly_dark",
+    font=dict(size=14),
+    margin=dict(l=20, r=20, t=50, b=50),
+    width=1200,
+    height=500,
+    barmode='overlay'
+)
+st.plotly_chart(fig2, use_container_width=True)
