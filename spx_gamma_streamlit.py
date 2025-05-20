@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import scipy
 from scipy.stats import norm
 import plotly.graph_objects as go
 import requests
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
+import time
 
 st.set_page_config(page_icon="🧊", layout="wide")
 
@@ -26,13 +26,10 @@ def calcGammaEx(S, K, vol, T, r, q, optType, OI):
 
 def isThirdFriday(d):
     return d.weekday() == 4 and 15 <= d.day <= 21
-#Agregar para calcular la tasa de dividendos anual por ahora en el codigo esta fijo
-#dividend_yield = st.number_input("Tasa de dividendos (% anual)", min_value=0.0, max_value=20.0, value=1.5, step=0.1)
 
 # Función para calcular el precio estimado de ES o NQ
-def calculate_future_price(index_price, r=0.04,d=0.015, index="SPX"):
+def calculate_future_price(index_price, r=0.04, d=0.015, index="SPX"):
     current_date = datetime.now()
-    # Asumimos que el próximo vencimiento es el tercer viernes de junio 2025 (20/06/2025)
     next_expiry = datetime(2025, 6, 20, 16, 0)  # Cierre del mercado
     T = (next_expiry - current_date).total_seconds() / (365.25 * 24 * 60 * 60)
     future_price = index_price * np.exp((r - d) * T)
@@ -60,6 +57,10 @@ def fetch_data(index):
 # Selección del índice o conversión y tasa de interés
 selection = st.selectbox("Seleccione el índice o conversión:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="selection")
 risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=5.0, step=0.1, key="risk_free_rate")
+bar_width = st.slider("Bar Width for Charts", min_value=5, max_value=20, value=12, step=1)
+
+# Toggle for auto-refresh
+auto_refresh = st.checkbox("Enable Auto-Refresh (every 5 minutes)", value=False)
 
 # Verificar si la selección cambió
 if st.session_state['current_selection'] != selection:
@@ -75,8 +76,14 @@ if (current_time - st.session_state['last_request_time']).total_seconds() > 300 
     if data_json:
         st.session_state['data'] = data_json
 else:
-    st.write("Esperando la siguiente actualización en menos de 5 minutos...")
+    st.write(f"Last updated at {st.session_state['last_request_time'].strftime('%H:%M:%S')}. Next update in {int(300 - (current_time - st.session_state['last_request_time']).total_seconds())} seconds...")
     data_json = st.session_state['data']
+
+# Auto-refresh logic
+if auto_refresh:
+    time.sleep(5)  # Short sleep to avoid excessive CPU usage
+    if (datetime.now() - st.session_state['last_request_time']).total_seconds() > 300:
+        st.experimental_rerun()  # Rerun the app to fetch new data
 
 # Procesar datos si existen
 if data_json:
@@ -84,7 +91,6 @@ if data_json:
     futurePrice = calculate_future_price(spotPrice, r=risk_free_rate/100, d=0.015, index=selection.split('=>')[0] if '=>' in selection else selection)
     options_data = data_json["data"]["options"]
 
-    # Determinar qué precio usar para los cálculos (spotPrice para SPX/NDX, futurePrice para SPX=>ES/NDX=>NQ)
     basePrice = futurePrice if "=>" in selection else spotPrice
     display_label = selection.replace("=>", " to ") if "=>" in selection else selection
 
@@ -129,152 +135,129 @@ if data_json:
     df['CallOpenInt'] = df['CallOpenInt'].astype(float)
     df['PutOpenInt'] = df['PutOpenInt'].astype(float)
 
-    # Ajustar volatilidad implícita si es 0
     df['CallIV'] = df['CallIV'].replace(0.0, 0.2)
     df['PutIV'] = df['PutIV'].replace(0.0, 0.2)
 
-    # Get Today's Date
     current_date = datetime.now()
-
-    # Calcular tiempo hasta la expiración (T)
     df['daysTillExp'] = (df['ExpirationDate'] - current_date).dt.total_seconds() / (365.25 * 24 * 60 * 60)
-    df['daysTillExp'] = df['daysTillExp'].clip(lower=1e-5)  # Evitar T <= 0
+    df['daysTillExp'] = df['daysTillExp'].clip(lower=1e-5)
 
-    # ---=== CALCULATE SPOT GAMMA ===---
-    # Gamma Exposure = Unit Gamma * Open Interest * Contract Size * Spot Price
-    # To further convert into 'per 1% move' quantity, multiply by 1% of basePrice
     df['CallGEX'] = df['CallGamma'] * df['CallOpenInt'] * 100 * basePrice * basePrice * 0.01
     df['PutGEX'] = df['PutGamma'] * df['PutOpenInt'] * 100 * basePrice * basePrice * 0.01 * -1
-
     df['TotalGamma'] = (df['CallGEX'] + df['PutGEX']) / 10**9
     dfAgg = df.groupby(['StrikePrice']).sum(numeric_only=True)
 
-    # Rango de strikes
     fromStrike = 0.8 * basePrice
     toStrike = 1.2 * basePrice
 
-  # Chart 1: Absolute Gamma Exposure
-fig1 = go.Figure()
-
-# Positive Gamma Exposure (light blue)
-positive_gamma = dfAgg[dfAgg['TotalGamma'] >= 0]
-fig1.add_trace(go.Bar(
-    x=positive_gamma.index,
-    y=positive_gamma['TotalGamma'],
-    width=6,
-    marker_color='#66B3FF',  # Light blue
-    opacity=0.7,
-    name='Positive Gamma'
-))
-
-# Negative Gamma Exposure (orange)
-negative_gamma = dfAgg[dfAgg['TotalGamma'] < 0]
-fig1.add_trace(go.Bar(
-    x=negative_gamma.index,
-    y=negative_gamma['TotalGamma'],
-    width=6,
-    marker_color='#FF8C00',  # Orange
-    opacity=0.7,
-    name='Negative Gamma'
-))
-
-fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
-fig1.update_layout(
-    title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {display_label} Move",
-    xaxis_title="Strike",
-    yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
-    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
-    yaxis=dict(tickformat=".2f", automargin=True),
-    showlegend=True,
-    template="plotly_dark",
-    font=dict(size=14),
-    margin=dict(l=20, r=20, t=50, b=50),
-    width=1200,
-    height=500
-)
-st.plotly_chart(fig1, use_container_width=True)
-
-# Chart 2: Open Interest by Calls and Puts
-fig2 = go.Figure()
-
-# Base bars for all strikes
-fig2.add_trace(go.Bar(
-    x=dfAgg.index,
-    y=dfAgg['CallOpenInt'],
-    width=6,
-    marker_color='green',
-    opacity=0.5,  # Lower opacity for non-key strikes
-    name='Call OI'
-))
-fig2.add_trace(go.Bar(
-    x=dfAgg.index,
-    y=-1 * dfAgg['PutOpenInt'],
-    width=6,
-    marker_color='red',
-    opacity=0.5,  # Lower opacity for non-key strikes
-    name='Put OI'
-))
-
-# Highlight top 5 strikes for Calls
-top_calls = dfAgg.nlargest(5, 'CallOpenInt')
-fig2.add_trace(go.Bar(
-    x=top_calls.index,
-    y=top_calls['CallOpenInt'],
-    width=6,
-    marker_color='#00FF00',  # Brighter green for key strikes
-    opacity=1.0,
-    name='Top Call OI',
-    showlegend=False
-))
-
-# Highlight top 5 strikes for Puts
-top_puts = dfAgg.nlargest(5, 'PutOpenInt')
-fig2.add_trace(go.Bar(
-    x=top_puts.index,
-    y=-1 * top_puts['PutOpenInt'],
-    width=6,
-    marker_color='#FF0000',  # Brighter red for key strikes
-    opacity=1.0,
-    name='Top Put OI',
-    showlegend=False
-))
-
-# Add annotations for top strikes
-for strike, oi in top_calls['CallOpenInt'].items():
-    fig2.add_annotation(
-        x=strike,
-        y=oi,
-        text=f"{int(oi)}",
-        showarrow=True,
-        arrowhead=1,
-        yshift=10,
-        font=dict(color="white")
+    # Chart 1: Absolute Gamma Exposure
+    fig1 = go.Figure()
+    positive_gamma = dfAgg[dfAgg['TotalGamma'] >= 0]
+    fig1.add_trace(go.Bar(
+        x=positive_gamma.index,
+        y=positive_gamma['TotalGamma'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='#66B3FF',  # Light blue
+        opacity=0.7,
+        name='Positive Gamma'
+    ))
+    negative_gamma = dfAgg[dfAgg['TotalGamma'] < 0]
+    fig1.add_trace(go.Bar(
+        x=negative_gamma.index,
+        y=negative_gamma['TotalGamma'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='#FF8C00',  # Orange
+        opacity=0.7,
+        name='Negative Gamma'
+    ))
+    fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
+    fig1.update_layout(
+        title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {display_label} Move",
+        xaxis_title="Strike",
+        yaxis_title="Spot Gamma Exposure ($ billions/1% move)",
+        xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+        yaxis=dict(tickformat=".2f", automargin=True),
+        showlegend=True,
+        template="plotly_dark",
+        font=dict(size=14),
+        margin=dict(l=20, r=20, t=50, b=50),
+        width=1200,
+        height=500
     )
+    st.plotly_chart(fig1, use_container_width=True)
 
-for strike, oi in top_puts['PutOpenInt'].items():
-    fig2.add_annotation(
-        x=strike,
-        y=-1 * oi,
-        text=f"{int(oi)}",
-        showarrow=True,
-        arrowhead=1,
-        yshift=-10,
-        font=dict(color="white")
+    # Chart 2: Open Interest by Calls and Puts
+    fig2 = go.Figure()
+    fig2.add_trace(go.Bar(
+        x=dfAgg.index,
+        y=dfAgg['CallOpenInt'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='green',
+        opacity=0.5,
+        name='Call OI'
+    ))
+    fig2.add_trace(go.Bar(
+        x=dfAgg.index,
+        y=-1 * dfAgg['PutOpenInt'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='red',
+        opacity=0.5,
+        name='Put OI'
+    ))
+    top_calls = dfAgg.nlargest(5, 'CallOpenInt')
+    fig2.add_trace(go.Bar(
+        x=top_calls.index,
+        y=top_calls['CallOpenInt'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='#00FF00',
+        opacity=1.0,
+        name='Top Call OI',
+        showlegend=False
+    ))
+    top_puts = dfAgg.nlargest(5, 'PutOpenInt')
+    fig2.add_trace(go.Bar(
+        x=top_puts.index,
+        y=-1 * top_puts['PutOpenInt'],
+        width=bar_width,  # Use user-defined bar width
+        marker_color='#FF0000',
+        opacity=1.0,
+        name='Top Put OI',
+        showlegend=False
+    ))
+    # Annotate with strike prices instead of OI
+    for strike in top_calls.index:
+        fig2.add_annotation(
+            x=strike,
+            y=top_calls.loc[strike, 'CallOpenInt'],
+            text=f"{int(strike)}",  # Show strike price
+            showarrow=True,
+            arrowhead=1,
+            yshift=10,
+            font=dict(color="white")
+        )
+    for strike in top_puts.index:
+        fig2.add_annotation(
+            x=strike,
+            y=-1 * top_puts.loc[strike, 'PutOpenInt'],
+            text=f"{int(strike)}",  # Show strike price
+            showarrow=True,
+            arrowhead=1,
+            yshift=-10,
+            font=dict(color="white")
+        )
+    fig2.add_vline(x=basePrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
+    fig2.update_layout(
+        title=f"Total Open Interest for {display_label}",
+        xaxis_title="Strike",
+        yaxis_title="Open Interest (number of contracts)",
+        xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
+        yaxis=dict(tickformat=".0f", automargin=True),
+        showlegend=True,
+        template="plotly_dark",
+        font=dict(size=14),
+        margin=dict(l=20, r=20, t=50, b=50),
+        width=1200,
+        height=500,
+        barmode='overlay'
     )
-
-fig2.add_vline(x=basePrice, line=dict(color='blue', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
-fig2.update_layout(
-    title=f"Total Open Interest for {display_label}",
-    xaxis_title="Strike",
-    yaxis_title="Open Interest (number of contracts)",
-    xaxis=dict(range=[fromStrike, toStrike], tickformat=",", automargin=True),
-    yaxis=dict(tickformat=".0f", automargin=True),
-    showlegend=True,
-    template="plotly_dark",
-    font=dict(size=14),
-    margin=dict(l=20, r=20, t=50, b=50),
-    width=1200,
-    height=500,
-    barmode='overlay'
-)
-st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True)
