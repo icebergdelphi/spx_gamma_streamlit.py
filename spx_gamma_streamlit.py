@@ -27,13 +27,132 @@ def calcGammaEx(S, K, vol, T, r, q, optType, OI):
 def isThirdFriday(d):
     return d.weekday() == 4 and 15 <= d.day <= 21
 
+
+# Función para determinar la fecha de expiración de futuros ES/NQ
+def get_next_expiry_date():
+    """
+    Calcula la próxima fecha de expiración de los futuros E-mini S&P 500 (ES) y Nasdaq-100 (NQ).
+    Los futuros expiran el tercer viernes de marzo, junio, septiembre y diciembre.
+    
+    Returns:
+        datetime: Fecha y hora de expiración (cierre del mercado a las 16:00)
+    """
+    current_date = datetime.now()
+    
+    # Meses de expiración: marzo (3), junio (6), septiembre (9), diciembre (12)
+    expiry_months = [3, 6, 9, 12]
+    
+    # Encontrar el próximo mes de expiración
+    current_month = current_date.month
+    current_year = current_date.year
+    
+    next_expiry_month = None
+    next_expiry_year = current_year
+    
+    # Determinar el próximo mes de expiración
+    for month in expiry_months:
+        if month > current_month:
+            next_expiry_month = month
+            break
+    
+    # Si estamos después de diciembre, ir al próximo año
+    if next_expiry_month is None:
+        next_expiry_month = expiry_months[0]  # Marzo
+        next_expiry_year = current_year + 1
+    
+    # Encontrar el tercer viernes del mes de expiración
+    first_day = datetime(next_expiry_year, next_expiry_month, 1)
+    
+    # Calcular cuántos días hay que añadir para llegar al primer viernes
+    days_until_friday = (4 - first_day.weekday()) % 7
+    first_friday = first_day + timedelta(days=days_until_friday)
+    
+    # El tercer viernes es 14 días después del primer viernes
+    third_friday = first_friday + timedelta(days=14)
+    
+    # Si la fecha actual es posterior al tercer viernes de este mes de expiración,
+    # pasar al siguiente ciclo de expiración
+    if current_date.date() > third_friday.date() and current_date.month == next_expiry_month:
+        # Encontrar el siguiente mes de expiración
+        next_index = (expiry_months.index(next_expiry_month) + 1) % len(expiry_months)
+        next_expiry_month = expiry_months[next_index]
+        if next_index == 0:  # Si volvemos a marzo, incrementar el año
+            next_expiry_year += 1
+            
+        # Recalcular el tercer viernes
+        first_day = datetime(next_expiry_year, next_expiry_month, 1)
+        days_until_friday = (4 - first_day.weekday()) % 7
+        first_friday = first_day + timedelta(days=days_until_friday)
+        third_friday = first_friday + timedelta(days=14)
+    
+    # Establecer la hora de cierre del mercado (16:00)
+    expiry_datetime = datetime(third_friday.year, third_friday.month, third_friday.day, 16, 0)
+    
+    return expiry_datetime
+
+
+
+
 # Función para calcular el precio estimado de ES o NQ
 def calculate_future_price(index_price, r=0.04, d=0.015, index="SPX"):
+    """
+    Calcula el precio estimado del futuro ES o NQ basado en el precio del índice subyacente.
+    Utiliza la fórmula de costo de carry: F = S * e^((r-d)*T)
+    
+    Args:
+        index_price (float): Precio actual del índice (SPX o NDX)
+        r (float): Tasa de interés libre de riesgo anualizada (decimal)
+        d (float): Rendimiento de dividendos anualizado (decimal)
+        index (str): Nombre del índice ("SPX" o "NDX")
+        
+    Returns:
+        float: Precio estimado del futuro
+    """
     current_date = datetime.now()
-    next_expiry = datetime(2025, 6, 20, 16, 0)  # Cierre del mercado
+    next_expiry = get_next_expiry_date()
+    
+    # Calcular la fracción de año hasta la expiración
     T = (next_expiry - current_date).total_seconds() / (365.25 * 24 * 60 * 60)
+    
+    # Si estamos muy cerca de la expiración, usar un valor mínimo para evitar errores
+    T = max(T, 0.001)
+    
+    # Aplicar fórmula de precio de futuros
     future_price = index_price * np.exp((r - d) * T)
+    
     return future_price
+
+# Función para mostrar información de expiración
+def display_expiry_info():
+    """
+    Muestra información sobre la próxima fecha de expiración de futuros.
+    """
+    next_expiry = get_next_expiry_date()
+    expiry_str = next_expiry.strftime("%A, %d de %B de %Y a las %H:%M")
+    
+    days_to_expiry = (next_expiry - datetime.now()).days
+    hours_to_expiry = int((next_expiry - datetime.now()).total_seconds() / 3600) % 24
+    
+    st.sidebar.markdown("### Información de Expiración")
+    st.sidebar.markdown(f"**Próxima fecha de expiración:**  \n{expiry_str}")
+    st.sidebar.markdown(f"**Tiempo hasta expiración:**  \n{days_to_expiry} días y {hours_to_expiry} horas")
+    
+    # Opcional: Mostrar ciclo completo de expiración
+    with st.sidebar.expander("Ver ciclo de expiración"):
+        current_year = datetime.now().year
+        
+        st.markdown("#### Ciclo de expiración de futuros")
+        for year in range(current_year, current_year + 2):
+            st.markdown(f"**{year}**")
+            for month in [3, 6, 9, 12]:
+                first_day = datetime(year, month, 1)
+                days_until_friday = (4 - first_day.weekday()) % 7
+                first_friday = first_day + timedelta(days=days_until_friday)
+                third_friday = first_friday + timedelta(days=14)
+                expiry_date = datetime(third_friday.year, third_friday.month, third_friday.day, 16, 0)
+                
+                if expiry_date > datetime.now():
+                    st.markdown(f"- {expiry_date.strftime('%d de %B')}: **Próximo**" if expiry_date == get_next_expiry_date() else f"- {expiry_date.strftime('%d de %B')}")
 
 # Inicialización en el estado de la sesión
 if 'last_request_time' not in st.session_state:
@@ -58,7 +177,8 @@ def fetch_data(index):
 selection = st.selectbox("Seleccione el índice o conversión:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="selection")
 risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=5.0, step=0.1, key="risk_free_rate")
 bar_width = st.slider("Bar Width for Charts", min_value=5, max_value=20, value=6, step=1)
-
+# Añadir información de expiración
+display_expiry_info()
 # Toggle for auto-refresh
 auto_refresh = st.checkbox("Enable Auto-Refresh (every 5 minutes)", value=False)
 
