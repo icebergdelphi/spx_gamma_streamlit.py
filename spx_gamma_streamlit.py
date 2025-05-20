@@ -57,7 +57,7 @@ def fetch_data(index):
 # Selección del índice o conversión y tasa de interés
 selection = st.selectbox("Seleccione el índice o conversión:", ["SPX", "NDX", "SPX=>ES", "NDX=>NQ"], key="selection")
 risk_free_rate = st.number_input("Tasa de interés libre de riesgo (% anual)", min_value=0.0, max_value=20.0, value=5.0, step=0.1, key="risk_free_rate")
-bar_width = st.slider("Bar Width for Charts", min_value=5, max_value=20, value=12, step=1)
+bar_width = st.slider("Bar Width for Charts", min_value=5, max_value=20, value=6, step=1)
 
 # Toggle for auto-refresh
 auto_refresh = st.checkbox("Enable Auto-Refresh (every 5 minutes)", value=False)
