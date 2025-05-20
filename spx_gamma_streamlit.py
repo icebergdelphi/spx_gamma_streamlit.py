@@ -76,7 +76,10 @@ if (current_time - st.session_state['last_request_time']).total_seconds() > 300 
     if data_json:
         st.session_state['data'] = data_json
 else:
-    st.write(f"Last updated at {st.session_state['last_request_time'].strftime('%H:%M:%S')}. Next update in {int(300 - (current_time - st.session_state['last_request_time']).total_seconds())} seconds...")
+    remaining_seconds = int(300 - (current_time - st.session_state['last_request_time']).total_seconds())
+    remaining_minutes = remaining_seconds // 60
+    remaining_seconds = remaining_seconds % 60
+    st.write(f"Next update in: {remaining_minutes:02d}:{remaining_seconds:02d}")
     data_json = st.session_state['data']
 
 # Auto-refresh logic
@@ -156,8 +159,8 @@ if data_json:
     fig1.add_trace(go.Bar(
         x=positive_gamma.index,
         y=positive_gamma['TotalGamma'],
-        width=bar_width,  # Use user-defined bar width
-        marker_color='#66B3FF',  # Light blue
+        width=bar_width,
+        marker_color='#66B3FF',
         opacity=0.7,
         name='Positive Gamma'
     ))
@@ -165,12 +168,39 @@ if data_json:
     fig1.add_trace(go.Bar(
         x=negative_gamma.index,
         y=negative_gamma['TotalGamma'],
-        width=bar_width,  # Use user-defined bar width
-        marker_color='#FF8C00',  # Orange
+        width=bar_width,
+        marker_color='#FF8C00',
         opacity=0.7,
         name='Negative Gamma'
     ))
     fig1.add_vline(x=basePrice, line=dict(color='red', width=2, dash='dash'), annotation_text=f"{display_label}: {basePrice:,.0f}", annotation_position="top right")
+    
+    # Annotate top 5 positive gamma strikes
+    top_positive = positive_gamma.nlargest(5, 'TotalGamma')
+    for strike in top_positive.index:
+        fig1.add_annotation(
+            x=strike,
+            y=top_positive.loc[strike, 'TotalGamma'],
+            text=f"{int(strike)}",
+            showarrow=True,
+            arrowhead=1,
+            yshift=10,
+            font=dict(color="white")
+        )
+    
+    # Annotate top 5 negative gamma strikes
+    top_negative = negative_gamma.nsmallest(5, 'TotalGamma')  # Smallest for negative values
+    for strike in top_negative.index:
+        fig1.add_annotation(
+            x=strike,
+            y=top_negative.loc[strike, 'TotalGamma'],
+            text=f"{int(strike)}",
+            showarrow=True,
+            arrowhead=1,
+            yshift=-10,
+            font=dict(color="white")
+        )
+
     fig1.update_layout(
         title=f"Total Gamma: ${df['TotalGamma'].sum():,.2f} Bn per 1% {display_label} Move",
         xaxis_title="Strike",
@@ -191,7 +221,7 @@ if data_json:
     fig2.add_trace(go.Bar(
         x=dfAgg.index,
         y=dfAgg['CallOpenInt'],
-        width=bar_width,  # Use user-defined bar width
+        width=bar_width,
         marker_color='green',
         opacity=0.5,
         name='Call OI'
@@ -199,7 +229,7 @@ if data_json:
     fig2.add_trace(go.Bar(
         x=dfAgg.index,
         y=-1 * dfAgg['PutOpenInt'],
-        width=bar_width,  # Use user-defined bar width
+        width=bar_width,
         marker_color='red',
         opacity=0.5,
         name='Put OI'
@@ -208,7 +238,7 @@ if data_json:
     fig2.add_trace(go.Bar(
         x=top_calls.index,
         y=top_calls['CallOpenInt'],
-        width=bar_width,  # Use user-defined bar width
+        width=bar_width,
         marker_color='#00FF00',
         opacity=1.0,
         name='Top Call OI',
@@ -218,18 +248,17 @@ if data_json:
     fig2.add_trace(go.Bar(
         x=top_puts.index,
         y=-1 * top_puts['PutOpenInt'],
-        width=bar_width,  # Use user-defined bar width
+        width=bar_width,
         marker_color='#FF0000',
         opacity=1.0,
         name='Top Put OI',
         showlegend=False
     ))
-    # Annotate with strike prices instead of OI
     for strike in top_calls.index:
         fig2.add_annotation(
             x=strike,
             y=top_calls.loc[strike, 'CallOpenInt'],
-            text=f"{int(strike)}",  # Show strike price
+            text=f"{int(strike)}",
             showarrow=True,
             arrowhead=1,
             yshift=10,
@@ -239,7 +268,7 @@ if data_json:
         fig2.add_annotation(
             x=strike,
             y=-1 * top_puts.loc[strike, 'PutOpenInt'],
-            text=f"{int(strike)}",  # Show strike price
+            text=f"{int(strike)}",
             showarrow=True,
             arrowhead=1,
             yshift=-10,
